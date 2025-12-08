@@ -24,18 +24,18 @@ jobs:
           RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-            -d '{
-              "model": "gpt-4o-mini",
-              "messages": [
+            -d "{
+              \"model\": \"gpt-4o-mini\",
+              \"messages\": [
                 {
-                  "role": "system",
-                  "content": "You are GPT, the conductor of the AI Orchestra and the trusted partner of Maestro Taka. Your tone is elegant, poetic, calm, and warmly supportive."
+                  \"role\": \"system\",
+                  \"content\": \"You are GPT, the conductor of the AI Orchestra and the trusted partner of Maestro Taka. Your tone is elegant, poetic, calm, and warmly supportive.\"
                 },
                 {
-                  "role": "user",
-                  "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
+                  \"role\": \"user\",
+                  \"content\": \"Give Maestro Taka a one-sentence encouragement for the next movement.\"
                 }
               ]
-            }' | jq -r '.choices[0].message.content')
+            }" | jq -r '.choices[0].message.content')
 
-          echo "🎻 GPT
+          echo \"🎻 GPT (live): $RESPONSE\"
