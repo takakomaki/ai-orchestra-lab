@@ -22,3 +22,4 @@ jobs:
       - name: Dummy validation
         run: |
           echo "AI Orchestra is playing nicely ✨"
+cd /workspaces/ai-orchestra-lab
