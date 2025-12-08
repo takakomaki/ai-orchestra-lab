@@ -19,9 +19,9 @@ jobs:
           git diff --name-only HEAD^ HEAD || echo "First commit"
 
       - name: GPT Conductor Response
+        shell: bash
         run: |
-          # JSON を HEREDOC で安全に定義（EOF は行頭に置く）
-          read -r -d '' JSON_PAYLOAD << 'EOF'
+          cat > payload.json << 'EOF'
 {
   "model": "gpt-4o-mini",
   "messages": [
@@ -37,11 +37,13 @@ jobs:
 }
 EOF
 
-          # API 呼び出し
+          echo "Payload created:"
+          cat payload.json
+
           RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-            -d "$JSON_PAYLOAD")
+            -d @payload.json)
 
           echo "---- RAW RESPONSE ----"
           echo "$RAW_RESPONSE"
