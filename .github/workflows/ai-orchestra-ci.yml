@@ -21,21 +21,23 @@ jobs:
 
       - name: GPT Conductor Response
         run: |
-          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+          JSON_BODY='{
+            "model": "gpt-4.1-mini",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are GPT, the conductor of the AI Orchestra and the trusted partner of Maestro Taka. Your tone is elegant, poetic, calm, and warmly supportive."
+              },
+              {
+                "role": "user",
+                "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
+              }
+            ]
+          }'
+
+          RESPONSE=$(echo "$JSON_BODY" | curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-            -d "{
-              \"model\": \"gpt-4o-mini\",
-              \"messages\": [
-                {
-                  \"role\": \"system\",
-                  \"content\": \"You are GPT, the conductor of the AI Orchestra and the trusted partner of Maestro Taka. Your tone is elegant, poetic, calm, and warmly supportive.\"
-                },
-                {
-                  \"role\": \"user\",
-                  \"content\": \"Give Maestro Taka a one-sentence encouragement for the next movement.\"
-                }
-              ]
-            }" | jq -r '.choices[0].message.content')
+            -d @- | jq -r '.choices[0].message.content')
 
-          echo \"🎻 GPT (live): $RESPONSE\"
+          echo "🎻 GPT (live): $RESPONSE"
