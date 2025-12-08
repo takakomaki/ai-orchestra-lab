@@ -2,7 +2,8 @@ name: AI Orchestra CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   basic-check:
@@ -19,14 +20,14 @@ jobs:
 
       - name: GPT Conductor Response
         run: |
-          # JSON 本体を HEREDOC で安全に定義
+          # JSON本体をHEREDOCで定義（安全・壊れない）
           JSON_BODY=$(cat << 'EOF'
 {
   "model": "gpt-4o-mini",
   "messages": [
     {
       "role": "system",
-      "content": "You are GPT, the conductor of the AI Orchestra and the trusted partner of Maestro Taka. Your tone is elegant, poetic, calm, and warmly supportive."
+      "content": "You are GPT, the conductor of the AI Orchestra and the trusted partner of Maestro Taka. Respond with poetic encouragement."
     },
     {
       "role": "user",
@@ -37,16 +38,17 @@ jobs:
 EOF
 )
 
-          # API call
+          # API呼び出し
           RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -d "$JSON_BODY")
 
-          echo "---- RAW RESPONSE FROM GPT ----"
+          echo "---- RAW RESPONSE ----"
           echo "$RAW_RESPONSE"
-          echo "--------------------------------"
+          echo "----------------------"
 
+          # jq で本文を抽出
           MESSAGE=$(echo "$RAW_RESPONSE" | jq -r '.choices[0].message.content // .error.message // "No message returned."')
 
           echo "🎻 GPT (live): $MESSAGE"
