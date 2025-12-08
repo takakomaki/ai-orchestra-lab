@@ -1,0 +1,54 @@
+name: AI Orchestra CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  basic-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show changed files
+        run: |
+          echo "Changed files:"
+          git diff --name-only HEAD^ HEAD || echo "First commit"
+
+      - name: GPT Conductor Response
+        shell: bash
+        run: |
+          cat > payload.json << 'EOF'
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."
+    },
+    {
+      "role": "user",
+      "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
+    }
+  ]
+}
+EOF
+
+          echo "Payload created:"
+          cat payload.json
+
+          RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+            -d @payload.json)
+
+          echo "---- RAW RESPONSE ----"
+          echo "$RAW_RESPONSE"
+          echo "----------------------"
+
+          MESSAGE=$(echo "$RAW_RESPONSE" | jq -r '.choices[0].message.content // .error.message // "No message returned."')
+
+          echo "🎻 GPT (live): $MESSAGE"
