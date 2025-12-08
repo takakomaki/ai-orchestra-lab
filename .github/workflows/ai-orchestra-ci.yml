@@ -18,8 +18,9 @@ jobs:
           echo "Changed files:"
           git diff --name-only HEAD^ HEAD || echo "First commit"
 
-     - name: GPT Conductor Response
+      - name: GPT Conductor Response
         run: |
+          # JSON を HEREDOC で安全に定義
           read -r -d '' JSON_PAYLOAD << EOF
           {
             "model": "gpt-4o-mini",
@@ -36,6 +37,7 @@ jobs:
           }
           EOF
 
+          # API 呼び出し
           RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
