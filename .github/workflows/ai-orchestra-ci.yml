@@ -20,22 +20,7 @@ jobs:
 
       - name: GPT Conductor Response
         run: |
-          JSON_PAYLOAD=$(cat << 'EOF'
-          {
-            "model": "gpt-4o-mini",
-            "messages": [
-              {
-                "role": "system",
-                "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka. Your tone is elegant, poetic, and warmly supportive."
-              },
-              {
-                "role": "user",
-                "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
-              }
-            ]
-          }
-          EOF
-          )
+          JSON_PAYLOAD='{"model":"gpt-4o-mini","messages":[{"role":"system","content":"You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."},{"role":"user","content":"Give Maestro Taka a one-sentence encouragement for the next movement."}]}'
 
           RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
