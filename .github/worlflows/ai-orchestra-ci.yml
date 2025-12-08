@@ -1,0 +1,24 @@
+name: AI Orchestra CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  basic-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show changed files
+        run: |
+          echo "Changed files:"
+          git diff --name-only HEAD^ HEAD || echo "First commit"
+
+      - name: Dummy validation
+        run: |
+          echo "AI Orchestra is playing nicely ✨"
