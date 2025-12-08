@@ -20,22 +20,22 @@ jobs:
 
       - name: GPT Conductor Response
         run: |
-          # JSON を HEREDOC で安全に定義
-          read -r -d '' JSON_PAYLOAD << EOF
-          {
-            "model": "gpt-4o-mini",
-            "messages": [
-              {
-                "role": "system",
-                "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."
-              },
-              {
-                "role": "user",
-                "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
-              }
-            ]
-          }
-          EOF
+          # JSON を HEREDOC で安全に定義（EOF は行頭に置く）
+          read -r -d '' JSON_PAYLOAD << 'EOF'
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."
+    },
+    {
+      "role": "user",
+      "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
+    }
+  ]
+}
+EOF
 
           # API 呼び出し
           RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
