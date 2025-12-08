@@ -18,9 +18,23 @@ jobs:
           echo "Changed files:"
           git diff --name-only HEAD^ HEAD || echo "First commit"
 
-      - name: GPT Conductor Response
+     - name: GPT Conductor Response
         run: |
-          JSON_PAYLOAD='{"model":"gpt-4o-mini","messages":[{"role":"system","content":"You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."},{"role":"user","content":"Give Maestro Taka a one-sentence encouragement for the next movement."}]}'
+          read -r -d '' JSON_PAYLOAD << EOF
+          {
+            "model": "gpt-4o-mini",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."
+              },
+              {
+                "role": "user",
+                "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
+              }
+            ]
+          }
+          EOF
 
           RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
