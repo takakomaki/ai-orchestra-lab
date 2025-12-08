@@ -22,20 +22,20 @@ jobs:
         shell: bash
         run: |
           cat > payload.json << 'EOF'
-{
-  "model": "gpt-4o-mini",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."
-    },
-    {
-      "role": "user",
-      "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
-    }
-  ]
-}
-EOF
+          {
+            "model": "gpt-4o-mini",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."
+              },
+              {
+                "role": "user",
+                "content": "Give Maestro Taka a one-sentence encouragement for the next movement."
+              }
+            ]
+          }
+          EOF
 
           echo "Payload created:"
           cat payload.json
@@ -43,7 +43,8 @@ EOF
           RAW_RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-            -d @payload.json)
+            -d @payload.json
+          )
 
           echo "---- RAW RESPONSE ----"
           echo "$RAW_RESPONSE"
