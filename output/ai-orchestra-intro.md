@@ -5,3 +5,5 @@ Obsidian keeps the ideas and intentions, GitHub manages structure, and Cursor he
 This file is the very first note of our AI Orchestra.
 
 This is the first introductory note of the AI Orchestra project.
+
+This orchestra begins with a single note of intention.
