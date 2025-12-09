@@ -43,8 +43,11 @@ jobs:
           ${ISSUE_BODY}"
 
           # ===== 2. jq で JSON を安全に構築 =====
-          # JSONを変数に保存
-          JSON_PAYLOAD=$(jq -n \
+          # 一時ファイルを作成
+          REQUEST_FILE=$(mktemp)
+          
+          # JSONを一時ファイルに出力
+          jq -n \
             --arg model "claude-3-5-sonnet-20241022" \
             --arg prompt "$PROMPT" \
             '{
@@ -56,47 +59,53 @@ jobs:
                   "content": $prompt
                 }
               ]
-            }')
+            }' > "$REQUEST_FILE"
 
           echo "JSON payload built."
-          echo "Debug - Payload size: $(echo "$JSON_PAYLOAD" | wc -c) bytes"
+          echo "Debug - File: $REQUEST_FILE"
+          echo "Debug - File size: $(wc -c < "$REQUEST_FILE") bytes"
           echo "Debug - First 500 chars:"
-          echo "$JSON_PAYLOAD" | head -c 500
+          head -c 500 "$REQUEST_FILE"
           echo ""
           
-          # JSONの内容が有効か確認
-          if ! echo "$JSON_PAYLOAD" | jq empty 2>&1; then
+          # JSONファイルの内容が有効か確認
+          if ! jq empty "$REQUEST_FILE" 2>&1; then
             echo "Error: Generated JSON is invalid"
-            echo "$JSON_PAYLOAD"
+            cat "$REQUEST_FILE"
+            rm -f "$REQUEST_FILE"
             exit 1
           fi
           
           # ===== 3. Claude API を呼び出す =====
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/claude_response.json \
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
             https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "$JSON_PAYLOAD")
+            --data-binary "@$REQUEST_FILE")
+          
+          # 一時ファイルを削除
+          rm -f "$REQUEST_FILE"
 
           echo "HTTP Status Code: $HTTP_CODE"
           echo "Raw response:"
-          cat /tmp/claude_response.json
+          cat "$RESPONSE_FILE"
           echo ""
 
           # ===== 4. エラーチェック =====
           if [ "$HTTP_CODE" -ne 200 ]; then
-            ERROR=$(jq -r '.error.message // .error.type // "Unknown error"' /tmp/claude_response.json 2>/dev/null || echo "HTTP $HTTP_CODE error")
+            ERROR=$(jq -r '.error.message // .error.type // "Unknown error"' "$RESPONSE_FILE" 2>/dev/null || echo "HTTP $HTTP_CODE error")
             echo "Error from Claude API (HTTP $HTTP_CODE): $ERROR"
             COMMENT="❌ Claude API エラー (HTTP $HTTP_CODE): $ERROR"
           else
-            ERROR=$(jq -r '.error.message // empty' /tmp/claude_response.json)
+            ERROR=$(jq -r '.error.message // empty' "$RESPONSE_FILE")
             if [ -n "$ERROR" ]; then
               echo "Error from Claude API: $ERROR"
               COMMENT="❌ Claudeからのエラー: $ERROR"
             else
               # Claude の返答テキストだけを取り出す
-              COMMENT=$(jq -r '.content[0].text // empty' /tmp/claude_response.json)
+              COMMENT=$(jq -r '.content[0].text // empty' "$RESPONSE_FILE")
               
               if [ -z "$COMMENT" ]; then
                 echo "Warning: Could not extract comment from response"
@@ -104,6 +113,9 @@ jobs:
               fi
             fi
           fi
+          
+          # レスポンスファイルを削除
+          rm -f "$RESPONSE_FILE"
 
           # ===== 5. Issue にコメントとして投稿 =====
           echo "Posting comment to issue #${ISSUE_NUMBER}..."
