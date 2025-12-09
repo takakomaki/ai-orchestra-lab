@@ -9,7 +9,6 @@ on:
 
 jobs:
   claude-comment:
-    # ラベルに "Claude" を含む Issue だけ反応
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
     runs-on: ubuntu-latest
 
@@ -22,64 +21,50 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+
         run: |
-          echo "Calling Claude with Python-built JSON..."
+          echo "Calling Claude..."
 
-          # Pythonで安全にJSONを構築（改行・日本語をすべて面倒みてもらう）
-          JSON=$(python - << 'PY'
-import json, os
-
-issue_title = os.environ.get("ISSUE_TITLE", "")
-issue_body = os.environ.get("ISSUE_BODY", "")
-
-prompt = f"""あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
+          PROMPT=$(cat << 'EOF'
+あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
 
 以下のGitHub Issueの内容を読み、Maestro Takaに向けて：
 
 1. Issueの内容を一文で要約する
-2. 次に取るべき具体的なアクションを2〜3個、箇条書きで提案する
-3. GPTとは少し違う視点（優しいデビルズアドボケイト）を一文添える
+2. 次に取るべき具体的アクションを2〜3個提案する
+3. GPTとは違う角度から、優しいデビルズアドボケイト視点を一文添える
 
-日本語で、あたたかく、思いやりのある客観的トーンで回答してください。
+あたたかく誠実なトーンで、日本語で回答してください。
 
 【Issueタイトル】
-{issue_title}
+${ISSUE_TITLE}
 
 【Issue本文】
-{issue_body}
-"""
+${ISSUE_BODY}
+EOF
+          )
 
-payload = {
-    "model": "claude-3-5-sonnet-20241022",
-    "max_tokens": 500,
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt}
-            ]
-        }
-    ]
-}
-
-print(json.dumps(payload, ensure_ascii=False))
-PY
-)
-
-          echo "JSON payload built safely."
+          JSON_PAYLOAD=$(jq -n \
+            --arg prompt "$PROMPT" \
+            '{
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 400,
+              messages: [
+                { "role": "user", "content": [ { "type": "text", "text": $prompt } ] }
+              ]
+            }'
+          )
 
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "$JSON")
-
-          echo "Raw response: $RESPONSE"
+            -d "$JSON_PAYLOAD")
 
           COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
 
           if [ -z "$COMMENT" ]; then
-            COMMENT="（Claudeからの回答を取得できませんでした。）"
+            COMMENT="（Claudeの回答を取得できませんでした）"
           fi
 
           gh api \
