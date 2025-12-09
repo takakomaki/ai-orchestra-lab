@@ -43,8 +43,8 @@ jobs:
           ${ISSUE_BODY}"
 
           # ===== 2. jq で JSON を安全に構築 =====
-          # JSONを直接ファイルに出力
-          jq -n \
+          # JSONを変数に保存
+          JSON_PAYLOAD=$(jq -n \
             --arg model "claude-3-5-sonnet-20241022" \
             --arg prompt "$PROMPT" \
             '{
@@ -56,18 +56,18 @@ jobs:
                   "content": $prompt
                 }
               ]
-            }' > /tmp/claude_request.json
+            }')
 
           echo "JSON payload built."
-          echo "Debug - File size: $(wc -c < /tmp/claude_request.json) bytes"
+          echo "Debug - Payload size: $(echo "$JSON_PAYLOAD" | wc -c) bytes"
           echo "Debug - First 500 chars:"
-          head -c 500 /tmp/claude_request.json
+          echo "$JSON_PAYLOAD" | head -c 500
           echo ""
           
-          # JSONファイルの内容が有効か確認
-          if ! jq empty /tmp/claude_request.json 2>&1; then
+          # JSONの内容が有効か確認
+          if ! echo "$JSON_PAYLOAD" | jq empty 2>&1; then
             echo "Error: Generated JSON is invalid"
-            cat /tmp/claude_request.json
+            echo "$JSON_PAYLOAD"
             exit 1
           fi
           
@@ -77,7 +77,7 @@ jobs:
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d @/tmp/claude_request.json)
+            -d "$JSON_PAYLOAD")
 
           echo "HTTP Status Code: $HTTP_CODE"
           echo "Raw response:"
