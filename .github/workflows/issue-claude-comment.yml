@@ -72,22 +72,26 @@ jobs:
           fi
           
           # ===== 3. Claude API を呼び出す =====
-          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" https://api.anthropic.com/v1/messages \
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/claude_response.json \
+            https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
             -d @/tmp/claude_request.json)
 
-          echo "Raw response: $RESPONSE"
+          echo "HTTP Status Code: $HTTP_CODE"
+          echo "Raw response:"
+          cat /tmp/claude_response.json
+          echo ""
 
           # ===== 4. エラーチェック =====
-          ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty')
+          ERROR=$(jq -r '.error.message // empty' /tmp/claude_response.json)
           if [ -n "$ERROR" ]; then
             echo "Error from Claude API: $ERROR"
             COMMENT="❌ Claudeからのエラー: $ERROR"
           else
             # Claude の返答テキストだけを取り出す
-            COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+            COMMENT=$(jq -r '.content[0].text // empty' /tmp/claude_response.json)
             
             if [ -z "$COMMENT" ]; then
               COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
