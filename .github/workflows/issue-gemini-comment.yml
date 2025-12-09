@@ -49,10 +49,10 @@ Please answer kindly and briefly in Japanese."
           # ---- Build JSON payload ----
           payload=$(jq -n --arg text "$PROMPT" '
             {
-              contents: [
+              "contents": [
                 {
-                  parts: [
-                    { text: $text }
+                  "parts": [
+                    { "text": $text }
                   ]
                 }
               ]
@@ -60,7 +60,7 @@ Please answer kindly and briefly in Japanese."
 
           echo "📦 JSON payload built."
 
-          # ---- Gemini API 呼び出し ----
+          # ---- Call Gemini API ----
           response=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "x-goog-api-key: ${GEMINI_API_KEY}" \
@@ -70,14 +70,14 @@ Please answer kindly and briefly in Japanese."
           echo "🟦 Raw response from Gemini:"
           echo "$response"
 
-          # ---- Extract reply ----
+          # ---- Extract reply text ----
           CONTENT=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
 
           if [ -z "$CONTENT" ]; then
             CONTENT="（Geminiからの回答を取得できませんでした。）"
           fi
 
-          # ---- Post comment ----
+          # ---- Post comment back to GitHub Issue ----
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
             -f body="$CONTENT"
