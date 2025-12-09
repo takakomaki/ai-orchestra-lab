@@ -1,0 +1,58 @@
+name: Gemini issue assistant
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  gemini-comment:
+    if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Gemini')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call Gemini and post comment
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          echo "✨ Gemini workflow running"
+
+          # 1) プロンプトを組み立てる
+          PROMPT="You are the embodiment of Beauty in the AI Orchestra. 
+Explain the issue to Maestro Taka with clarity, warmth, and elegance.
+
+Issue Title:
+$ISSUE_TITLE
+
+Issue Body:
+$ISSUE_BODY
+"
+
+          # 2) Gemini API 呼び出し（最小）
+          RESPONSE=$(curl -s \
+            -H "Content-Type: application/json" \
+            -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+            -X POST \
+            -d "{\"contents\":[{\"parts\":[{\"text\":\"$PROMPT\"}]}]}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")
+
+          echo "Raw response: $RESPONSE"
+
+          # 3) テキストを抽出
+          COMMENT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+          if [ -z "$COMMENT" ]; then
+            COMMENT="（Geminiからの返答を取得できませんでした。）\n$RESPONSE"
+          fi
+
+          # 4) Issue に投稿
+          gh api \
+            repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
+            -f body="$COMMENT"
