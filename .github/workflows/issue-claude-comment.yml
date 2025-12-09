@@ -70,9 +70,18 @@ jobs:
 
           # JSONを一時ファイルに保存
           echo "$json" > /tmp/claude_request.json
+          echo "Debug - File size: $(wc -c < /tmp/claude_request.json) bytes"
+          echo "Debug - File first line: $(head -n 1 /tmp/claude_request.json)"
+          
+          # JSONファイルの内容が有効か確認
+          if ! jq empty /tmp/claude_request.json 2>/dev/null; then
+            echo "Error: Generated JSON is invalid"
+            cat /tmp/claude_request.json
+            exit 1
+          fi
           
           # ===== 3. Claude API を呼び出す =====
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
