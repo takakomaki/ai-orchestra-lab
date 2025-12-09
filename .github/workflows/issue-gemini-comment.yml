@@ -9,18 +9,18 @@ on:
 
 jobs:
   gemini-comment:
-    # 「Gemini」ラベルが付いたときだけ実行
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Gemini')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Call Gemini API (minimal working version)
+      - name: Gemini issue comment (Japanese, issue-aware)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
+          GH_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
+          REPO:           ${{ github.repository }}
+          ISSUE_NUMBER:   ${{ github.event.issue.number }}
+          ISSUE_TITLE:    ${{ github.event.issue.title }}
+          ISSUE_BODY:     ${{ github.event.issue.body }}
         run: |
           set -euo pipefail
 
@@ -29,13 +29,32 @@ jobs:
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
 
-          # ---- Gemini API 呼び出し（最小動作版）----
-          payload=$(jq -n --arg text "Hello from GitHub Actions" \
-            '{ contents: [ { parts: [ { text: $text } ] } ] }')
+          # ---- Gemini 用のプロンプトを組み立て（英語指示で「日本語で答えて」と伝える）----
+          payload=$(jq -n \
+            --arg title "$ISSUE_TITLE" \
+            --arg body  "$ISSUE_BODY" \
+            '{
+              contents: [
+                {
+                  parts: [
+                    {
+                      text:
+                        "You are the Beauty section assistant in Taka AI Orchestra.\n\n" +
+                        "Read the following GitHub Issue and reply in Japanese.\n\n" +
+                        "1. Summarize the issue in one gentle sentence.\n" +
+                        "2. Suggest 1-2 concrete next actions Taka can take.\n" +
+                        "3. End with a short warm encouragement.\n\n" +
+                        "Issue title:\n" + $title + "\n\nIssue body:\n" + $body
+                    }
+                  ]
+                }
+              ]
+            }')
 
           echo "📦 JSON payload:"
           echo "$payload"
 
+          # ---- Gemini API 呼び出し ----
           response=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "x-goog-api-key: ${GEMINI_API_KEY}" \
@@ -45,11 +64,11 @@ jobs:
           echo "🟦 Raw response from Gemini:"
           echo "$response"
 
-          # ---- Gemini の返答を抽出 ----
+          # ---- 返答テキストを抽出 ----
           comment_body=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
 
           if [ -z "$comment_body" ]; then
-            comment_body="（Geminiから返答を取得できませんでした。）"
+            comment_body="（Geminiからのコメントを取得できませんでした。）"
           fi
 
           # ---- Issue にコメント投稿 ----
