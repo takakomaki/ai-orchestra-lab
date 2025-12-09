@@ -15,22 +15,25 @@ jobs:
 
       - name: GPT Conductor Response
         run: |
+          JSON=$(jq -n \
+            --arg sys "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka." \
+            --arg usr "Give Maestro Taka one short encouragement line for the next movement." \
+            '{
+              model: "gpt-4o-mini",
+              messages: [
+                {role: "system", content: $sys},
+                {role: "user", content: $usr}
+              ]
+            }'
+          )
+
+          echo "Payload:"
+          echo "$JSON"
+
           RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-            -d '{
-              "model": "gpt-4o-mini",
-              "messages": [
-                {
-                  "role": "system",
-                  "content": "You are GPT, the conductor of the AI Orchestra and trusted partner of Maestro Taka."
-                },
-                {
-                  "role": "user",
-                  "content": "Please give Maestro Taka one short encouragement line for the next movement."
-                }
-              ]
-            }')
+            -d "$JSON")
 
           echo "---- RAW RESPONSE ----"
           echo "$RESPONSE"
