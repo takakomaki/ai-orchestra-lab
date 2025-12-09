@@ -9,14 +9,70 @@ on:
 
 jobs:
   claude-comment:
-    # Issue に "Claude" ラベルが付いたときだけ動く
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Log Claude workflow info
+      - name: Claude API call (minimal)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
-          echo "✅ Claude workflow is running"
-          echo "Repository : ${{ github.repository }}"
-          echo "Issue number: ${{ github.event.issue.number }}"
-          echo "Issue title : ${{ github.event.issue.title }}"
+          set -euo pipefail
+
+          echo "✨ Claude workflow is running"
+          echo "Repository : ${REPO}"
+          echo "Issue number : ${ISSUE_NUMBER}"
+          echo "Issue title  : ${ISSUE_TITLE}"
+
+          # ---- Claudeのプロンプト（HEREDOC形式）----
+          read -r -d '' PROMPT << 'EOF'
+You are the Wind section assistant in Taka AI Orchestra.
+Speak gently, clearly, and with wisdom.
+Reply briefly in Japanese.
+
+Here is the GitHub Issue:
+
+[Title]
+${ISSUE_TITLE}
+
+EOF
+
+          # ---- JSON Payload ----
+          payload=$(jq -n --arg prompt "$PROMPT" '
+            {
+              "model": "claude-3-sonnet-20240229",
+              "max_tokens": 200,
+              "messages": [
+                { "role": "user", "content": $prompt }
+              ]
+            }')
+
+          echo "📦 JSON payload built."
+
+          # ---- Call Claude API ----
+          response=$(curl -s -X POST \
+            -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$payload" \
+            "https://api.anthropic.com/v1/messages")
+
+          echo "🟦 Raw response from Claude:"
+          echo "$response"
+
+          # ---- Extract Claude reply ----
+          CONTENT=$(echo "$response" | jq -r '.content[0].text // empty')
+
+          if [ -z "$CONTENT" ]; then
+            CONTENT="（Claudeからの回答を取得できませんでした。）"
+          fi
+
+          # ---- Post comment to GitHub Issue ----
+          gh api \
+            repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
+            -f body="$CONTENT"
+
+          echo "✅ Comment posted to issue #${ISSUE_NUMBER}"
