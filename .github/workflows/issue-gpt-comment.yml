@@ -1,5 +1,8 @@
 name: GPT issue comment test
 
+permissions:
+  issues: write
+
 on:
   issues:
     types: [labeled]
@@ -8,7 +11,6 @@ jobs:
   add-gpt-comment:
     runs-on: ubuntu-latest
 
-    # ラベル一覧の中に「GPT」が含まれているときだけ動く
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'GPT')
 
     steps:
