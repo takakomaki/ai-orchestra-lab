@@ -77,13 +77,25 @@ jobs:
           fi
           
           # ===== 3. Claude API を呼び出す =====
+          # ファイルの内容を確認
+          echo "Debug - Full JSON content:"
+          cat "$REQUEST_FILE"
+          echo ""
+          echo "Debug - File exists and is readable:"
+          ls -la "$REQUEST_FILE"
+          echo ""
+          echo "Debug - Testing file read:"
+          cat "$REQUEST_FILE" | head -c 200
+          echo "..."
+          echo ""
+          
           RESPONSE_FILE=$(mktemp)
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
+          HTTP_CODE=$(cat "$REQUEST_FILE" | curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
             https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            --data-binary "@$REQUEST_FILE")
+            -d @-)
           
           # 一時ファイルを削除
           rm -f "$REQUEST_FILE"
