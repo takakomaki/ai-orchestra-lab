@@ -19,18 +19,3 @@ jobs:
           echo "✅ Claude workflow is running"
           echo "Issue number: ${{ github.event.issue.number }}"
           echo "Issue title:  ${{ github.event.issue.title }}"
-
-      - name: Call Claude and post comment
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          REPO: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          echo "🔔 Calling Claude..."
-
-          # 1) プロンプト全文をBash側で組み立てる
-          PROMPT="$(cat << EOF
-あなた
