@@ -9,10 +9,6 @@ on:
 
 jobs:
   claude-comment:
-<<<<<<< HEAD
-    # ラベル "[Claude]" がついたときだけ実行
-=======
->>>>>>> 02de44b (Claude API呼び出しの条件を修正し、JSON構築処理を改善。HTTPステータスコードとレスポンスボディのエラーチェックを強化しました。)
     if: github.event.label.name == '[Claude]'
     runs-on: ubuntu-latest
 
@@ -28,7 +24,6 @@ jobs:
         run: |
           echo "Calling Claude..."
 
-          # ===== 1. プロンプトを組み立てる =====
           PROMPT="あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
 
           以下のGitHub Issueの内容を読み、Maestro Takaに向けて：
@@ -45,18 +40,8 @@ jobs:
           【Issue本文】
           ${ISSUE_BODY}"
 
-          # ===== 2. jq で JSON を安全に構築 =====
-<<<<<<< HEAD
-          # 一時ファイルを作成
-          REQUEST_FILE=$(mktemp)
-          
-          # JSONを一時ファイルに出力
-          jq -n \
-            --arg model "claude-3-5-sonnet-20241022" \
-=======
           REQUEST_JSON=$(jq -n \
             --arg model "claude-sonnet-4-20250514" \
->>>>>>> 02de44b (Claude API呼び出しの条件を修正し、JSON構築処理を改善。HTTPステータスコードとレスポンスボディのエラーチェックを強化しました。)
             --arg prompt "$PROMPT" \
             '{
               "model": $model,
@@ -67,101 +52,33 @@ jobs:
                   "content": $prompt
                 }
               ]
-<<<<<<< HEAD
-            }' > "$REQUEST_FILE"
-
-          echo "JSON payload built."
-          echo "Debug - File: $REQUEST_FILE"
-          echo "Debug - File size: $(wc -c < "$REQUEST_FILE") bytes"
-          echo "Debug - First 500 chars:"
-          head -c 500 "$REQUEST_FILE"
-          echo ""
-          
-          # JSONファイルの内容が有効か確認
-          if ! jq empty "$REQUEST_FILE" 2>&1; then
-            echo "Error: Generated JSON is invalid"
-            cat "$REQUEST_FILE"
-            rm -f "$REQUEST_FILE"
-            exit 1
-          fi
-          
-          # ===== 3. Claude API を呼び出す =====
-          # ファイルの内容を確認
-          echo "Debug - Full JSON content:"
-          cat "$REQUEST_FILE"
-          echo ""
-          echo "Debug - File exists and is readable:"
-          ls -la "$REQUEST_FILE"
-          echo ""
-          echo "Debug - Testing file read:"
-          cat "$REQUEST_FILE" | head -c 200
-          echo "..."
-          echo ""
-          
-          RESPONSE_FILE=$(mktemp)
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
-=======
             }')
 
           echo "JSON payload built."
-          echo "Debug - JSON preview:"
-          echo "$REQUEST_JSON" | head -c 500
-          echo ""
           
-          # ===== 3. Claude API を呼び出す =====
           RESPONSE=$(curl -s -w "\n%{http_code}" \
->>>>>>> 02de44b (Claude API呼び出しの条件を修正し、JSON構築処理を改善。HTTPステータスコードとレスポンスボディのエラーチェックを強化しました。)
             https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-<<<<<<< HEAD
-            --data-binary @"${REQUEST_FILE}")
-          
-          # 一時ファイルを削除
-          rm -f "$REQUEST_FILE"
-
-          echo "HTTP Status Code: $HTTP_CODE"
-          echo "Raw response:"
-          cat "$RESPONSE_FILE"
-=======
             -d "$REQUEST_JSON")
           
-          # HTTPステータスコードとボディを分離
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
 
           echo "HTTP Status Code: $HTTP_CODE"
-          echo "Raw response:"
-          echo "$RESPONSE_BODY"
->>>>>>> 02de44b (Claude API呼び出しの条件を修正し、JSON構築処理を改善。HTTPステータスコードとレスポンスボディのエラーチェックを強化しました。)
-          echo ""
 
-          # ===== 4. エラーチェック =====
           if [ "$HTTP_CODE" -ne 200 ]; then
-<<<<<<< HEAD
-            ERROR=$(jq -r '.error.message // .error.type // "Unknown error"' "$RESPONSE_FILE" 2>/dev/null || echo "HTTP $HTTP_CODE error")
-            echo "Error from Claude API (HTTP $HTTP_CODE): $ERROR"
-            COMMENT="❌ Claude API エラー (HTTP $HTTP_CODE): $ERROR"
-          else
-            ERROR=$(jq -r '.error.message // empty' "$RESPONSE_FILE")
-=======
             ERROR=$(echo "$RESPONSE_BODY" | jq -r '.error.message // .error.type // "Unknown error"' 2>/dev/null || echo "HTTP $HTTP_CODE error")
             echo "Error from Claude API (HTTP $HTTP_CODE): $ERROR"
             COMMENT="❌ Claude API エラー (HTTP $HTTP_CODE): $ERROR"
           else
             ERROR=$(echo "$RESPONSE_BODY" | jq -r '.error.message // empty')
->>>>>>> 02de44b (Claude API呼び出しの条件を修正し、JSON構築処理を改善。HTTPステータスコードとレスポンスボディのエラーチェックを強化しました。)
             if [ -n "$ERROR" ]; then
               echo "Error from Claude API: $ERROR"
               COMMENT="❌ Claudeからのエラー: $ERROR"
             else
-              # Claude の返答テキストだけを取り出す
-<<<<<<< HEAD
-              COMMENT=$(jq -r '.content[0].text // empty' "$RESPONSE_FILE")
-=======
               COMMENT=$(echo "$RESPONSE_BODY" | jq -r '.content[0].text // empty')
->>>>>>> 02de44b (Claude API呼び出しの条件を修正し、JSON構築処理を改善。HTTPステータスコードとレスポンスボディのエラーチェックを強化しました。)
               
               if [ -z "$COMMENT" ]; then
                 echo "Warning: Could not extract comment from response"
@@ -169,17 +86,9 @@ jobs:
               fi
             fi
           fi
-          
-          # レスポンスファイルを削除
-          rm -f "$RESPONSE_FILE"
 
-          # ===== 5. Issue にコメントとして投稿 =====
           echo "Posting comment to issue #${ISSUE_NUMBER}..."
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
             -f body="$COMMENT" \
-<<<<<<< HEAD
             --method POST
-=======
-            --method POST
->>>>>>> 02de44b (Claude API呼び出しの条件を修正し、JSON構築処理を改善。HTTPステータスコードとレスポンスボディのエラーチェックを強化しました。)
