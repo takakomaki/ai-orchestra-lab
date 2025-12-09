@@ -42,8 +42,9 @@ jobs:
           【Issue本文】
           ${ISSUE_BODY}"
 
-          # JSONを構築
-          REQUEST_JSON=$(jq -n \
+          # JSONを構築して一時ファイルに保存
+          REQUEST_FILE=$(mktemp)
+          jq -n \
             --arg model "claude-3-5-sonnet-20241022" \
             --arg prompt "$PROMPT" \
             '{
@@ -55,7 +56,18 @@ jobs:
                   "content": $prompt
                 }
               ]
-            }')
+            }' > "$REQUEST_FILE"
+
+          # JSONの妥当性を確認
+          if ! jq empty "$REQUEST_FILE" 2>/dev/null; then
+            echo "Error: Invalid JSON generated"
+            cat "$REQUEST_FILE"
+            rm -f "$REQUEST_FILE"
+            exit 1
+          fi
+
+          echo "JSON payload created successfully"
+          echo "File size: $(wc -c < "$REQUEST_FILE") bytes"
 
           # Claude API を呼び出す
           RESPONSE=$(curl -s -w "\n%{http_code}" \
@@ -63,7 +75,10 @@ jobs:
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "$REQUEST_JSON")
+            --data-binary @"${REQUEST_FILE}")
+
+          # 一時ファイルを削除
+          rm -f "$REQUEST_FILE"
 
           # HTTPステータスコードとボディを分離
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
