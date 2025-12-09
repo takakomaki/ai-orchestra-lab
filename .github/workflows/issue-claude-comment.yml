@@ -1,0 +1,21 @@
+name: Claude issue assistant
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  claude-comment:
+    # ラベルに "Claude" が含まれているときだけ実行
+    if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Debug Claude workflow
+        run: |
+          echo "✅ Claude workflow is running"
+          echo "Issue number: ${{ github.event.issue.number }}"
+          echo "Issue title:  ${{ github.event.issue.title }}"
