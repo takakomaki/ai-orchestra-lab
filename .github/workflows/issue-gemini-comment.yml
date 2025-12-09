@@ -28,37 +28,33 @@ jobs:
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
 
-          # ---- Gemini 本番プロンプト ----
-          PROMPT="You are the Beauty section assistant in Taka AI Orchestra.
-
-Your role:
-- Speak with elegance, clarity, and warmth.
-- Give concise, beautiful insights.
-- Support Maestro Taka with refined perspective.
-
-Here is the GitHub Issue you should respond to:
-
-[Title]
-${ISSUE_TITLE}
-
-[Body]
-${ISSUE_BODY}
-
-Please answer kindly and briefly in Japanese."
-
-          # ---- Build JSON payload ----
-          payload=$(jq -n --arg text "$PROMPT" '
+          # ---- Build JSON payload with full prompt in jq ----
+          payload=$(jq -n \
+            --arg title "$ISSUE_TITLE" \
+            --arg body "$ISSUE_BODY" '
             {
               "contents": [
                 {
                   "parts": [
-                    { "text": $text }
+                    {
+                      "text":
+                        "You are the Beauty section assistant in Taka AI Orchestra.\n\n" +
+                        "Your role:\n" +
+                        "- Speak with elegance, clarity, and warmth.\n" +
+                        "- Give concise, beautiful insights.\n" +
+                        "- Support Maestro Taka with refined perspective.\n\n" +
+                        "Here is the GitHub Issue you should respond to:\n\n" +
+                        "[Title]\n" + $title + "\n\n" +
+                        "[Body]\n" + $body + "\n\n" +
+                        "Please answer kindly and briefly in Japanese."
+                    }
                   ]
                 }
               ]
             }')
 
           echo "📦 JSON payload built."
+          echo "$payload"
 
           # ---- Call Gemini API ----
           response=$(curl -s -X POST \
