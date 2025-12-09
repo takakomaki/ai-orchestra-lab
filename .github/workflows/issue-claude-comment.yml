@@ -27,20 +27,20 @@ jobs:
           echo "Issue number : ${ISSUE_NUMBER}"
           echo "Issue title  : ${ISSUE_TITLE}"
 
-          # ---- Claudeのプロンプト（HEREDOC形式）----
-          read -r -d '' PROMPT << 'EOF'
-You are the Wind section assistant in Taka AI Orchestra.
-Speak gently, clearly, and with wisdom.
-Reply briefly in Japanese.
+          # ---- Build prompt (HEREDOC with variable expansion) ----
+          PROMPT=$(cat << EOF
+          You are the Wind section assistant in Taka AI Orchestra.
+          Speak gently, clearly, and with wisdom.
+          Reply briefly in Japanese.
 
-Here is the GitHub Issue:
+          Here is the GitHub Issue:
 
-[Title]
-${ISSUE_TITLE}
+          [Title]
+          ${ISSUE_TITLE}
+          EOF
+          )
 
-EOF
-
-          # ---- JSON Payload ----
+          # ---- JSON payload ----
           payload=$(jq -n --arg prompt "$PROMPT" '
             {
               "model": "claude-3-sonnet-20240229",
@@ -70,7 +70,7 @@ EOF
             CONTENT="（Claudeからの回答を取得できませんでした。）"
           fi
 
-          # ---- Post comment to GitHub Issue ----
+          # ---- Post comment back to GitHub Issue ----
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
             -f body="$CONTENT"
