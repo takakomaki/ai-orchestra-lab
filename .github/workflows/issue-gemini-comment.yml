@@ -9,14 +9,75 @@ on:
 
 jobs:
   gemini-comment:
-    # Issue に "Gemini" ラベルが付いたときだけ動く
+    # Issue に Gemini ラベルがついたときだけ動かす
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Gemini')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Log Gemini workflow info
+      - name: Call Gemini and post comment
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
+          set -e
+
           echo "✨ Gemini workflow is running"
-          echo "Repository : ${{ github.repository }}"
-          echo "Issue number: ${{ github.event.issue.number }}"
-          echo "Issue title : ${{ github.event.issue.title }}"
+          echo "Repository : $REPO"
+          echo "Issue number: $ISSUE_NUMBER"
+          echo "Issue title : $ISSUE_TITLE"
+
+          # 1) プロンプトを組み立て（シェル変数にまとめておく）
+          prompt="あなたは AI Orchestra の『美のセクション』担当、Gemini アシスタントです。
+次の GitHub Issue の内容を読み、Maestro Taka に向けて：
+
+1. Issue の内容を一文で優しく要約する
+2. 次に取るとよさそうなアクションを 1〜2 個、箇条書きで提案する
+
+日本語で、あたたかく・簡潔に答えてください。
+
+【Issue タイトル】
+$ISSUE_TITLE
+
+【Issue 本文】
+$ISSUE_BODY
+"
+
+          # 2) OpenAI 互換エンドポイント向けの JSON を jq で作成
+          json=$(jq -n \
+            --arg model "gemini-2.5-flash" \
+            --arg prompt "$prompt" \
+            '{
+              model: $model,
+              messages: [
+                { "role": "system", "content": "You are a helpful assistant." },
+                { "role": "user",   "content": $prompt }
+              ]
+            }')
+
+          echo "JSON payload built:"
+          echo "$json"
+
+          # 3) Gemini API を呼び出し
+          response=$(curl -sS \
+            -X POST "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" \
+            -H "Authorization: Bearer ${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$json")
+
+          echo "Raw response: $response"
+
+          # 4) 返事の本文だけを取り出す
+          comment_body=$(echo "$response" | jq -r '.choices[0].message.content // empty')
+
+          if [ -z "$comment_body" ]; then
+            comment_body="（Gemini からの回答を取得できませんでした。API キーやリクエスト内容を確認してください。）"
+          fi
+
+          # 5) Issue にコメントとして投稿
+          gh api \
+            repos/"$REPO"/issues/"$ISSUE_NUMBER"/comments \
+            -f body="$comment_body"
