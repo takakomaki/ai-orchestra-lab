@@ -59,7 +59,6 @@ jobs:
 
           echo "JSON payload built."
           echo "Debug - JSON length: ${#json}"
-          echo "Debug - First 200 chars of JSON: ${json:0:200}"
 
           # JSONが空でないか確認
           if [ -z "$json" ] || [ "$json" = "null" ]; then
@@ -69,12 +68,15 @@ jobs:
             exit 1
           fi
 
+          # JSONを一時ファイルに保存
+          echo "$json" > /tmp/claude_request.json
+          
           # ===== 3. Claude API を呼び出す =====
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "$json")
+            -d @/tmp/claude_request.json)
 
           echo "Raw response: $RESPONSE"
 
