@@ -29,31 +29,18 @@ jobs:
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
 
-          # 1) プロンプトを組み立て
-          PROMPT=$(cat <<EOF
-あなたは AI Orchestra の「美の化身」Gemini アシスタントです。
+          # 1) プロンプトを組み立てる
+          PROMPT_HEADER="あなたは AI Orchestra の「美の化身」Gemini アシスタントです。次の GitHub Issue を読み、日本語でやさしく・簡潔にコメントを書いてください。まず Issue の内容を一文で要約し、そのあとタカさんが次に取ると良い具体的な一歩を 1〜2 個提案し、最後にあたたかい励ましのひと言を添えてください。"
 
-以下の GitHub Issue の内容を読み、日本語でやさしく・簡潔にコメントを書いてください。
+          PROMPT="${PROMPT_HEADER}\n\n【Issue タイトル】\n${ISSUE_TITLE}\n\n【Issue 本文】\n${ISSUE_BODY}"
 
-- まず Issue の内容を一文で要約
-- 次に、タカさんが次に取ると良い具体的な一歩を 1〜2 個提案
-- 最後に、あたたかい励ましのひと言を添える
-
-【Issue タイトル】
-${ISSUE_TITLE}
-
-【Issue 本文】
-${ISSUE_BODY}
-EOF
-)
-
-          # 2) JSON を安全に構築
+          # 2) Gemini 用の JSON を jq で構築
           JSON=$(jq -n --arg prompt "$PROMPT" '
             {
               contents: [
                 {
                   parts: [
-                    { text: $prompt }
+                    { "text": $prompt }
                   ]
                 }
               ]
@@ -71,14 +58,14 @@ EOF
           echo "Raw response from Gemini:"
           echo "$RESPONSE"
 
-          # 4) 返答テキストを取り出し
+          # 4) コメント本文を取り出す
           COMMENT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
 
           if [ -z "$COMMENT" ]; then
             COMMENT="（Gemini からの回答を取得できませんでした。API レスポンスやキー設定をご確認ください。）"
           fi
 
-          # 5) Issue にコメントとして投稿
+          # 5) Issue にコメント投稿
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
             -f body="$COMMENT"
