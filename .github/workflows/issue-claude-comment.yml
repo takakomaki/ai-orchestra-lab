@@ -90,12 +90,12 @@ jobs:
           echo ""
           
           RESPONSE_FILE=$(mktemp)
-          HTTP_CODE=$(cat "$REQUEST_FILE" | curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
             https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d @-)
+            --data-binary @"${REQUEST_FILE}")
           
           # 一時ファイルを削除
           rm -f "$REQUEST_FILE"
