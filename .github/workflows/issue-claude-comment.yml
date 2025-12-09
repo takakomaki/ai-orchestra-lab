@@ -9,7 +9,7 @@ on:
 
 jobs:
   claude-comment:
-    # ラベルに Claude が含まれているときだけ実行
+    # ラベルに "Claude" が含まれているときだけ実行
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
     runs-on: ubuntu-latest
 
@@ -23,80 +23,58 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
+          set -e
+
           echo "Calling Claude..."
 
-          # 1) プロンプトを作成
-          cat > /tmp/prompt.txt << 'PROMPT_EOF'
-          あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。次のGitHub Issueを読み、Maestro Takaに日本語でやさしくコメントしてください。
-
-          1. Issueの内容を一文で要約
-          2. 次の一歩として取れそうなアクションを2〜3個、箇条書き
-          3. やさしいデビルズアドボケイトのひと言を最後に添える
-          PROMPT_EOF
-          
-          # Issueの情報を追加
-          echo "" >> /tmp/prompt.txt
-          echo "【Issueタイトル】" >> /tmp/prompt.txt
-          echo "${ISSUE_TITLE}" >> /tmp/prompt.txt
-          echo "" >> /tmp/prompt.txt
-          echo "【Issue本文】" >> /tmp/prompt.txt
-          echo "${ISSUE_BODY}" >> /tmp/prompt.txt
-          
-          PROMPT=$(cat /tmp/prompt.txt)
-
-          # 2) jq で JSON ペイロードを作成
-          jq -n \
-            --arg model "claude-3-5-sonnet-20241022" \
-            --arg prompt "$PROMPT" \
-            '{
-              "model": $model,
-              "max_tokens": 1024,
-              "messages": [
+          # 1) jq で JSON を安全に組み立て
+          JSON=$(jq -n \
+            --arg title "$ISSUE_TITLE" \
+            --arg body "$ISSUE_BODY" '
+            {
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 400,
+              messages: [
                 {
-                  "role": "user",
-                  "content": $prompt
+                  role: "user",
+                  content: [
+                    {
+                      "type": "text",
+                      "text":
+                        "あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。次のGitHub Issueを読み、Maestro Takaに日本語でやさしくコメントしてください。\n\n" +
+                        "1. Issueの内容を一文で要約\n" +
+                        "2. 次の一歩として取れそうなアクションを2〜3個、箇条書き\n" +
+                        "3. やさしいデビルズアドボケイトのひと言を最後に添える\n\n" +
+                        "【Issueタイトル】\n" + $title + "\n\n【Issue本文】\n" + $body
+                    }
+                  ]
                 }
               ]
-            }' > /tmp/claude_request.json
+            }')
 
           echo "JSON payload built."
-          
-          # JSONの検証
-          if ! jq empty /tmp/claude_request.json 2>/dev/null; then
-            echo "Error: Invalid JSON"
-            exit 1
-          fi
 
-          # 3) Claude API を呼び出す
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/claude_response.json \
-            https://api.anthropic.com/v1/messages \
+          # 2) Claude API を呼び出し
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d @/tmp/claude_request.json)
+            -d "$JSON" || true)
 
-          echo "HTTP Status: $HTTP_CODE"
-          echo "Raw response:"
-          cat /tmp/claude_response.json
+          echo "Raw response from Claude:"
+          echo "$RESPONSE"
 
-          # 4) エラーチェック
-          ERROR=$(jq -r '.error.message // empty' /tmp/claude_response.json)
-          if [ -n "$ERROR" ]; then
-            echo "Error from Claude API: $ERROR"
-            COMMENT="❌ Claudeからのエラー: $ERROR"
-          else
-            # Claude のテキストだけを取り出す
-            COMMENT=$(jq -r '.content[0].text // empty' /tmp/claude_response.json)
-            
-            if [ -z "$COMMENT" ]; then
-              COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
-            fi
+          # 3) JSON 解析。失敗してもワークフローは落とさない
+          COMMENT=$(echo "$RESPONSE" \
+            | jq -r '.content[0].text // empty' 2>/dev/null || echo "")
+
+          if [ -z "$COMMENT" ]; then
+            COMMENT="（Claudeからの通常レスポンスを取得できませんでした。以下は生のレスポンスです：）\n\n$RESPONSE"
           fi
 
-          # 5) Issue にコメント投稿
-          echo "Posting comment to issue..."
+          # 4) Issue にコメントを投稿
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
             -f body="$COMMENT"
-          
-          echo "Comment posted successfully!"
+
+          echo "Comment posted."
