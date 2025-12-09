@@ -13,14 +13,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Gemini issue comment (Japanese, issue-aware)
+      - name: Gemini API call (production prompt)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GH_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
-          REPO:           ${{ github.repository }}
-          ISSUE_NUMBER:   ${{ github.event.issue.number }}
-          ISSUE_TITLE:    ${{ github.event.issue.title }}
-          ISSUE_BODY:     ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           set -euo pipefail
 
@@ -29,51 +28,58 @@ jobs:
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
 
-          # ---- Gemini 用のプロンプトを組み立て（英語指示で「日本語で答えて」と伝える）----
-          payload=$(jq -n \
-            --arg title "$ISSUE_TITLE" \
-            --arg body  "$ISSUE_BODY" \
-            '{
+          # ---- Gemini 本番プロンプト ----
+          PROMPT="You are the Beauty section assistant in Taka AI Orchestra.
+
+Your role:
+- Speak with elegance, clarity, and warmth.
+- Give concise, beautiful insights.
+- Support Maestro Taka with refined perspective.
+
+Here is the GitHub Issue you should respond to:
+
+[Title]
+${ISSUE_TITLE}
+
+[Body]
+${ISSUE_BODY}
+
+Please answer kindly and briefly in Japanese."
+
+          # ---- Build JSON payload ----
+          payload=$(jq -n --arg text "$PROMPT" '
+            {
               contents: [
                 {
                   parts: [
-                    {
-                      text:
-                        "You are the Beauty section assistant in Taka AI Orchestra.\n\n" +
-                        "Read the following GitHub Issue and reply in Japanese.\n\n" +
-                        "1. Summarize the issue in one gentle sentence.\n" +
-                        "2. Suggest 1-2 concrete next actions Taka can take.\n" +
-                        "3. End with a short warm encouragement.\n\n" +
-                        "Issue title:\n" + $title + "\n\nIssue body:\n" + $body
-                    }
+                    { text: $text }
                   ]
                 }
               ]
             }')
 
-          echo "📦 JSON payload:"
-          echo "$payload"
+          echo "📦 JSON payload built."
 
           # ---- Gemini API 呼び出し ----
           response=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "x-goog-api-key: ${GEMINI_API_KEY}" \
             -d "$payload" \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent")
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent")
 
           echo "🟦 Raw response from Gemini:"
           echo "$response"
 
-          # ---- 返答テキストを抽出 ----
-          comment_body=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
+          # ---- Extract reply ----
+          CONTENT=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
 
-          if [ -z "$comment_body" ]; then
-            comment_body="（Geminiからのコメントを取得できませんでした。）"
+          if [ -z "$CONTENT" ]; then
+            CONTENT="（Geminiからの回答を取得できませんでした。）"
           fi
 
-          # ---- Issue にコメント投稿 ----
+          # ---- Post comment ----
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
-            -f body="$comment_body"
+            -f body="$CONTENT"
 
           echo "✅ Comment posted to issue #${ISSUE_NUMBER}"
