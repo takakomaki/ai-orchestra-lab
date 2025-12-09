@@ -28,7 +28,7 @@ jobs:
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
 
-          # ---- Build JSON payload with full prompt in jq ----
+          # ---- Build JSON payload WITHOUT '+' operator ----
           payload=$(jq -n \
             --arg title "$ISSUE_TITLE" \
             --arg body "$ISSUE_BODY" '
@@ -37,17 +37,13 @@ jobs:
                 {
                   "parts": [
                     {
-                      "text":
-                        "You are the Beauty section assistant in Taka AI Orchestra.\n\n" +
-                        "Your role:\n" +
-                        "- Speak with elegance, clarity, and warmth.\n" +
-                        "- Give concise, beautiful insights.\n" +
-                        "- Support Maestro Taka with refined perspective.\n\n" +
-                        "Here is the GitHub Issue you should respond to:\n\n" +
-                        "[Title]\n" + $title + "\n\n" +
-                        "[Body]\n" + $body + "\n\n" +
-                        "Please answer kindly and briefly in Japanese."
-                    }
+                      "text": "You are the Beauty section assistant in Taka AI Orchestra.\n\nYour role:\n- Speak with elegance, clarity, and warmth.\n- Give concise, beautiful insights.\n- Support Maestro Taka with refined perspective.\n\nHere is the GitHub Issue you should respond to."
+                    },
+                    { "text": "\n\n[Title]\n" },
+                    { "text": $title },
+                    { "text": "\n\n[Body]\n" },
+                    { "text": $body },
+                    { "text": "\n\nPlease answer kindly and briefly in Japanese." }
                   ]
                 }
               ]
