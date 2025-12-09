@@ -51,13 +51,11 @@ ${ISSUE_BODY}
           json=$(jq -n --arg prompt "$PROMPT" '
             {
               model: "claude-3-5-sonnet-20241022",
-              max_tokens: 500,
+              max_tokens: 1024,
               messages: [
                 {
                   role: "user",
-                  content: [
-                    { "type": "text", "text": $prompt }
-                  ]
+                  content: $prompt
                 }
               ]
             }
@@ -74,11 +72,18 @@ ${ISSUE_BODY}
 
           echo "Raw response: $RESPONSE"
 
-          # ===== 4. Claude の返答テキストだけを取り出す =====
-          COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
-
-          if [ -z "$COMMENT" ]; then
-            COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
+          # ===== 4. エラーチェック =====
+          ERROR=$(echo "$RESPONSE" | jq -r '.error.message // empty')
+          if [ -n "$ERROR" ]; then
+            echo "Error from Claude API: $ERROR"
+            COMMENT="❌ Claudeからのエラー: $ERROR"
+          else
+            # Claude の返答テキストだけを取り出す
+            COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+            
+            if [ -z "$COMMENT" ]; then
+              COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
+            fi
           fi
 
           # ===== 5. Issue にコメントとして投稿 =====
