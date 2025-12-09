@@ -9,19 +9,43 @@ on:
 
 jobs:
   gemini-comment:
-    # 「Gemini」ラベルが付いた Issue だけを対象
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Gemini')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Smoke test Gemini workflow
+      - name: Gemini API call (minimal)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
+          set -euo pipefail
           echo "✨ Gemini workflow is running"
           echo "Repository : ${REPO}"
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
+
+          # ---- Gemini API 呼び出し（最小版） ----
+          payload=$(jq -n --arg text "Hello from GitHub Actions" '
+            {
+              "contents": [
+                {
+                  "parts": [
+                    { "text": $text }
+                  ]
+                }
+              ]
+            }')
+
+          echo "📦 JSON payload:"
+          echo "$payload"
+
+          response=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+            -d "$payload" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent")
+
+          echo "🟦 Raw response from Gemini:"
+          echo "$response"
