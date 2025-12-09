@@ -47,12 +47,12 @@ jobs:
             --arg model "claude-3-5-sonnet-20241022" \
             --arg prompt "$PROMPT" \
             '{
-              model: $model,
-              max_tokens: 1024,
-              messages: [
+              "model": $model,
+              "max_tokens": 1024,
+              "messages": [
                 {
-                  role: "user",
-                  content: $prompt
+                  "role": "user",
+                  "content": $prompt
                 }
               ]
             }')
