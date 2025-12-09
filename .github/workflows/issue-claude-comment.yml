@@ -9,8 +9,8 @@ on:
 
 jobs:
   claude-comment:
-    # ラベル一覧の中に "Claude" が含まれているときだけ実行
-    if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
+    # ラベル "Claude" がついたときだけ実行
+    if: github.event.label.name == 'Claude'
     runs-on: ubuntu-latest
 
     steps:
@@ -23,65 +23,71 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          echo "Calling Claude..."
+          echo "Calling Claude API..."
 
-          # 1) プロンプト文を組み立てる（超シンプル版）
-          PROMPT=$(cat << 'EOF'
-あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
-次のGitHub Issueを読んで、Maestro Takaへの返信コメントを書いてください。
+          # プロンプトを組み立てる
+          PROMPT="あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
 
-- Issueの内容を一文で要約
-- 次の一歩として取れそうなアクションを2〜3個、箇条書き
-- やさしいデビルズアドボケイトのひと言を最後に添える
+          以下のGitHub Issueの内容を読み、Maestro Takaに向けて：
 
-日本語で、あたたかく、落ち着いたトーンでお願いします。
+          1. Issueの内容を一文で要約する
+          2. 次に取るべき具体的なアクションを2〜3個、箇条書きで提案する
+          3. GPTとは少し違う視点（優しいデビルズアドボケイト）を一文添える
 
-【Issueタイトル】
-EOF
-)
-          PROMPT="$PROMPT
-${ISSUE_TITLE}
+          日本語で、あたたかく、思いやりのある客観的トーンで回答してください。
 
-【Issue本文】
-${ISSUE_BODY}
-"
+          【Issueタイトル】
+          ${ISSUE_TITLE}
 
-          # 2) jq で JSON を構築
-          json=$(jq -n --arg prompt "$PROMPT" '
-            {
-              model: "claude-3-5-sonnet-20241022",
-              max_tokens: 500,
-              messages: [
+          【Issue本文】
+          ${ISSUE_BODY}"
+
+          # JSONを構築
+          REQUEST_JSON=$(jq -n \
+            --arg model "claude-3-5-sonnet-20241022" \
+            --arg prompt "$PROMPT" \
+            '{
+              "model": $model,
+              "max_tokens": 1024,
+              "messages": [
                 {
-                  role: "user",
-                  content: [
-                    { "type": "text", "text": $prompt }
-                  ]
+                  "role": "user",
+                  "content": $prompt
                 }
               ]
-            }
-          ')
+            }')
 
-          echo "JSON payload built."
-
-          # 3) Claude API を呼び出す
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+          # Claude API を呼び出す
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "$json")
+            -d "$REQUEST_JSON")
 
-          echo "Raw response:"
-          echo "$RESPONSE"
+          # HTTPステータスコードとボディを分離
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
 
-          # 4) Claudeの本文だけを取り出す
-          COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+          echo "HTTP Status Code: $HTTP_CODE"
 
-          if [ -z "$COMMENT" ]; then
-            COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
+          # エラーチェック
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            ERROR=$(echo "$RESPONSE_BODY" | jq -r '.error.message // .error.type // "Unknown error"' 2>/dev/null || echo "HTTP $HTTP_CODE error")
+            echo "Error: $ERROR"
+            COMMENT="❌ Claude API エラー (HTTP $HTTP_CODE): $ERROR"
+          else
+            # Claude の返答テキストを取り出す
+            COMMENT=$(echo "$RESPONSE_BODY" | jq -r '.content[0].text // empty')
+            
+            if [ -z "$COMMENT" ]; then
+              COMMENT="（Claudeからの回答を取得できませんでした。）"
+            fi
           fi
 
-          # 5) Issue にコメント投稿
+          # Issue にコメントとして投稿
+          echo "Posting comment to issue #${ISSUE_NUMBER}..."
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
-            -f body="$COMMENT"
+            -f body="$COMMENT" \
+            --method POST
