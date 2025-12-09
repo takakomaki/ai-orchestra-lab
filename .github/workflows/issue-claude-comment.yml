@@ -9,7 +9,7 @@ on:
 
 jobs:
   claude-comment:
-    # ラベル一覧の中に "Claude" が含まれているときだけ実行
+    # ラベルに "Claude" が含まれているときだけ実行
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
     runs-on: ubuntu-latest
 
@@ -23,67 +23,53 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          echo "Calling Claude API..."
+          echo "Calling Claude..."
 
-          # 1) プロンプト文を組み立てる（超シンプル版）
-          PROMPT=$(cat << 'EOF'
-あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
-次のGitHub Issueを読んで、Maestro Takaへの返信コメントを書いてください。
-
-- Issueの内容を一文で要約
-- 次の一歩として取れそうなアクションを2〜3個、箇条書き
-- やさしいデビルズアドボケイトのひと言を最後に添える
-
-日本語で、あたたかく、落ち着いたトーンでお願いします。
-
-【Issueタイトル】
-EOF
-)
-          PROMPT="$PROMPT
-${ISSUE_TITLE}
-
-【Issue本文】
-${ISSUE_BODY}
-"
-
-          # 2) jq で JSON を構築
-          json=$(jq -n --arg prompt "$PROMPT" '
+          # 1) jq で JSON ペイロードを作成（シンプル版）
+          JSON=$(jq -n \
+            --arg title "$ISSUE_TITLE" \
+            --arg body "$ISSUE_BODY" '
             {
               model: "claude-3-5-sonnet-20241022",
-              max_tokens: 500,
+              max_tokens: 400,
               messages: [
                 {
                   role: "user",
                   content: [
-                    { "type": "text", "text": $prompt }
+                    {
+                      "type": "text",
+                      "text":
+                        "あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。次のGitHub Issueを読み、Maestro Takaに日本語でやさしくコメントしてください。\n\n" +
+                        "1. Issueの内容を一文で要約\n" +
+                        "2. 次の一歩として取れそうなアクションを2〜3個、箇条書き\n" +
+                        "3. やさしいデビルズアドボケイトのひと言を最後に添える\n\n" +
+                        "【Issueタイトル】\n" + $title + "\n\n【Issue本文】\n" + $body
+                    }
                   ]
                 }
               ]
-            }
-          ')
+            }')
 
-          echo "JSON payload created successfully"
-          echo "File size: $(wc -c < "$REQUEST_FILE") bytes"
+          echo "JSON payload built."
 
-          # 3) Claude API を呼び出す
+          # 2) Claude API を呼び出す
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "$json")
+            -d "$JSON")
 
           echo "Raw response:"
           echo "$RESPONSE"
 
-          # 4) Claudeの本文だけを取り出す
+          # 3) Claude のテキストだけを取り出す
           COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
 
           if [ -z "$COMMENT" ]; then
             COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
           fi
 
-          # 5) Issue にコメント投稿
+          # 4) Issue にコメント投稿
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
-            -f body="$COMMENT" \
-            --method POST
+            -f body="$COMMENT"
