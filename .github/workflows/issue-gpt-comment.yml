@@ -1,0 +1,21 @@
+name: GPT issue comment test
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  add-gpt-comment:
+    runs-on: ubuntu-latest
+
+    # ラベル一覧の中に「GPT」が含まれているときだけ動く
+    if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'GPT')
+
+    steps:
+      - name: Add test comment as GPT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
+            -f body='👋 こちらGPTです。ラベル「GPT」がついたので、このIssueに接続テストのコメントを書いています。'
