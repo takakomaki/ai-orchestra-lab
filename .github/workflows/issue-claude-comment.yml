@@ -43,7 +43,8 @@ jobs:
           ${ISSUE_BODY}"
 
           # ===== 2. jq で JSON を安全に構築 =====
-          json=$(jq -n \
+          # JSONを直接ファイルに出力
+          jq -n \
             --arg model "claude-3-5-sonnet-20241022" \
             --arg prompt "$PROMPT" \
             '{
@@ -55,26 +56,16 @@ jobs:
                   "content": $prompt
                 }
               ]
-            }')
+            }' > /tmp/claude_request.json
 
           echo "JSON payload built."
-          echo "Debug - JSON length: ${#json}"
-
-          # JSONが空でないか確認
-          if [ -z "$json" ] || [ "$json" = "null" ]; then
-            echo "Error: JSON payload is empty or null"
-            gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
-              -f body="❌ エラー: JSONペイロードの生成に失敗しました"
-            exit 1
-          fi
-
-          # JSONを一時ファイルに保存
-          echo "$json" > /tmp/claude_request.json
           echo "Debug - File size: $(wc -c < /tmp/claude_request.json) bytes"
-          echo "Debug - File first line: $(head -n 1 /tmp/claude_request.json)"
+          echo "Debug - First 500 chars:"
+          head -c 500 /tmp/claude_request.json
+          echo ""
           
           # JSONファイルの内容が有効か確認
-          if ! jq empty /tmp/claude_request.json 2>/dev/null; then
+          if ! jq empty /tmp/claude_request.json 2>&1; then
             echo "Error: Generated JSON is invalid"
             cat /tmp/claude_request.json
             exit 1
