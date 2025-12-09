@@ -14,9 +14,73 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Log Gemini workflow info
+      - name: Call Gemini and post comment
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
+          set -euo pipefail
+
           echo "✨ Gemini workflow is running"
-          echo "Repository : ${{ github.repository }}"
-          echo "Issue number: ${{ github.event.issue.number }}"
-          echo "Issue title : ${{ github.event.issue.title }}"
+          echo "Repository : ${REPO}"
+          echo "Issue number: ${ISSUE_NUMBER}"
+          echo "Issue title : ${ISSUE_TITLE}"
+
+          # 1) プロンプトを組み立て
+          PROMPT=$(cat <<EOF
+あなたは AI Orchestra の「美の化身」Gemini アシスタントです。
+
+以下の GitHub Issue の内容を読み、日本語でやさしく・簡潔にコメントを書いてください。
+
+- まず Issue の内容を一文で要約
+- 次に、タカさんが次に取ると良い具体的な一歩を 1〜2 個提案
+- 最後に、あたたかい励ましのひと言を添える
+
+【Issue タイトル】
+${ISSUE_TITLE}
+
+【Issue 本文】
+${ISSUE_BODY}
+EOF
+)
+
+          # 2) JSON を安全に構築
+          JSON=$(jq -n --arg prompt "$PROMPT" '
+            {
+              contents: [
+                {
+                  parts: [
+                    { text: $prompt }
+                  ]
+                }
+              ]
+            }
+          ')
+
+          echo "✅ JSON payload built."
+
+          # 3) Gemini API を呼び出し
+          RESPONSE=$(curl -s -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$JSON")
+
+          echo "Raw response from Gemini:"
+          echo "$RESPONSE"
+
+          # 4) 返答テキストを取り出し
+          COMMENT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+          if [ -z "$COMMENT" ]; then
+            COMMENT="（Gemini からの回答を取得できませんでした。API レスポンスやキー設定をご確認ください。）"
+          fi
+
+          # 5) Issue にコメントとして投稿
+          gh api \
+            repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
+            -f body="$COMMENT"
+
+          echo "✅ Comment posted to issue #${ISSUE_NUMBER}"
