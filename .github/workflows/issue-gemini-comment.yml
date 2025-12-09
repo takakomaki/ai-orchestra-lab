@@ -9,73 +9,19 @@ on:
 
 jobs:
   gemini-comment:
-    # 「Gemini」ラベルが付いた Issue だけを対象にする
+    # 「Gemini」ラベルが付いた Issue だけを対象
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Gemini')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Call Gemini and post comment
+      - name: Smoke test Gemini workflow
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          set -euo pipefail
-
           echo "✨ Gemini workflow is running"
           echo "Repository : ${REPO}"
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
-
-          # プロンプトを組み立て
-          prompt="あなたはAI Orchestraの『美の化身』Geminiアシスタントです。
-次のGitHub Issueを読み、Maestro Takaに向けて：
-1. Issueの内容を一文でやさしく要約する
-2. 次に取るべき具体的な一歩を1〜2個、日本語で提案する
-
-【Issueタイトル】
-${ISSUE_TITLE}
-
-【Issue本文】
-${ISSUE_BODY}
-"
-
-          # JSON ペイロードを安全に構築
-          json=$(jq -n \
-            --arg prompt "$prompt" \
-            '{
-              contents: [
-                {
-                  parts: [
-                    { "text": $prompt }
-                  ]
-                }
-              ]
-            }')
-
-          echo "✅ JSON payload built."
-
-          # Gemini API を呼び出し
-          response=$(curl -sS \
-            -H "Content-Type: application/json" \
-            -H "x-goog-api-key: ${GEMINI_API_KEY}" \
-            -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent" \
-            -d "$json")
-
-          echo "Raw response from Gemini:"
-          echo "$response"
-
-          # レスポンスからテキストを抽出
-          comment_body=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
-
-          if [ -z "$comment_body" ]; then
-            comment_body="（Geminiからのコメントを取得できませんでした。）"
-          fi
-
-          # Issue にコメント投稿
-          gh api \
-            "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" \
-            -f body="$comment_body"
