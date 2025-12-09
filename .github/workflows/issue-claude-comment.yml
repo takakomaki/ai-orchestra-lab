@@ -43,9 +43,11 @@ jobs:
           ${ISSUE_BODY}"
 
           # ===== 2. jq で JSON を安全に構築 =====
-          json=$(jq -n --arg prompt "$PROMPT" '
-            {
-              model: "claude-3-5-sonnet-20241022",
+          json=$(jq -n \
+            --arg model "claude-3-5-sonnet-20241022" \
+            --arg prompt "$PROMPT" \
+            '{
+              model: $model,
               max_tokens: 1024,
               messages: [
                 {
@@ -53,10 +55,19 @@ jobs:
                   content: $prompt
                 }
               ]
-            }
-          ')
+            }')
 
           echo "JSON payload built."
+          echo "Debug - JSON length: ${#json}"
+          echo "Debug - First 200 chars of JSON: ${json:0:200}"
+
+          # JSONが空でないか確認
+          if [ -z "$json" ] || [ "$json" = "null" ]; then
+            echo "Error: JSON payload is empty or null"
+            gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
+              -f body="❌ エラー: JSONペイロードの生成に失敗しました"
+            exit 1
+          fi
 
           # ===== 3. Claude API を呼び出す =====
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
