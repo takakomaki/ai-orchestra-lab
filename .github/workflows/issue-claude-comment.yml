@@ -9,8 +9,8 @@ on:
 
 jobs:
   claude-comment:
-    # ラベル一覧の中に "Claude" が含まれているときだけ実行
-    if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
+    # ラベル "[Claude]" がついたときだけ実行
+    if: github.event.label.name == '[Claude]'
     runs-on: ubuntu-latest
 
     steps:
@@ -85,20 +85,29 @@ jobs:
           echo ""
 
           # ===== 4. エラーチェック =====
-          ERROR=$(jq -r '.error.message // empty' /tmp/claude_response.json)
-          if [ -n "$ERROR" ]; then
-            echo "Error from Claude API: $ERROR"
-            COMMENT="❌ Claudeからのエラー: $ERROR"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            ERROR=$(jq -r '.error.message // .error.type // "Unknown error"' /tmp/claude_response.json 2>/dev/null || echo "HTTP $HTTP_CODE error")
+            echo "Error from Claude API (HTTP $HTTP_CODE): $ERROR"
+            COMMENT="❌ Claude API エラー (HTTP $HTTP_CODE): $ERROR"
           else
-            # Claude の返答テキストだけを取り出す
-            COMMENT=$(jq -r '.content[0].text // empty' /tmp/claude_response.json)
-            
-            if [ -z "$COMMENT" ]; then
-              COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
+            ERROR=$(jq -r '.error.message // empty' /tmp/claude_response.json)
+            if [ -n "$ERROR" ]; then
+              echo "Error from Claude API: $ERROR"
+              COMMENT="❌ Claudeからのエラー: $ERROR"
+            else
+              # Claude の返答テキストだけを取り出す
+              COMMENT=$(jq -r '.content[0].text // empty' /tmp/claude_response.json)
+              
+              if [ -z "$COMMENT" ]; then
+                echo "Warning: Could not extract comment from response"
+                COMMENT="（Claudeからの回答を取得できませんでした。APIキーやリクエスト内容をご確認ください。）"
+              fi
             fi
           fi
 
           # ===== 5. Issue にコメントとして投稿 =====
+          echo "Posting comment to issue #${ISSUE_NUMBER}..."
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
-            -f body="$COMMENT"
+            -f body="$COMMENT" \
+            --method POST
