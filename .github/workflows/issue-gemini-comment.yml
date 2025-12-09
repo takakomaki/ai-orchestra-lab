@@ -13,13 +13,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Gemini API call (production prompt)
+      - name: Gemini API call (stable simple version)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REPO: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
+          GH_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
+          REPO:           ${{ github.repository }}
+          ISSUE_NUMBER:   ${{ github.event.issue.number }}
+          ISSUE_TITLE:    ${{ github.event.issue.title }}
         run: |
           set -euo pipefail
 
@@ -28,48 +28,32 @@ jobs:
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
 
-          # ---- Build JSON payload WITHOUT '+' operator ----
+          # ---- 最小・安定版プロンプト（Issue内容はまだ使わない）----
           payload=$(jq -n \
-            --arg title "$ISSUE_TITLE" \
-            --arg body "$ISSUE_BODY" '
-            {
-              "contents": [
-                {
-                  "parts": [
-                    {
-                      "text": "You are the Beauty section assistant in Taka AI Orchestra.\n\nYour role:\n- Speak with elegance, clarity, and warmth.\n- Give concise, beautiful insights.\n- Support Maestro Taka with refined perspective.\n\nHere is the GitHub Issue you should respond to."
-                    },
-                    { "text": "\n\n[Title]\n" },
-                    { "text": $title },
-                    { "text": "\n\n[Body]\n" },
-                    { "text": $body },
-                    { "text": "\n\nPlease answer kindly and briefly in Japanese." }
-                  ]
-                }
-              ]
-            }')
+            --arg text "You are the Beauty section assistant in Taka AI Orchestra. Please reply in Japanese with a short, gentle, and encouraging message for Maestro Taka, celebrating that the AI Orchestra GitHub workflow is running successfully." \
+            '{ contents: [ { parts: [ { text: $text } ] } ] }')
 
           echo "📦 JSON payload built."
           echo "$payload"
 
-          # ---- Call Gemini API ----
+          # ---- Gemini API 呼び出し ----
           response=$(curl -s -X POST \
             -H "Content-Type: application/json" \
             -H "x-goog-api-key: ${GEMINI_API_KEY}" \
             -d "$payload" \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent")
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent")
 
           echo "🟦 Raw response from Gemini:"
           echo "$response"
 
-          # ---- Extract reply text ----
+          # ---- 返答テキストを抽出 ----
           CONTENT=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
 
           if [ -z "$CONTENT" ]; then
             CONTENT="（Geminiからの回答を取得できませんでした。）"
           fi
 
-          # ---- Post comment back to GitHub Issue ----
+          # ---- Issue にコメント投稿 ----
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
             -f body="$CONTENT"
