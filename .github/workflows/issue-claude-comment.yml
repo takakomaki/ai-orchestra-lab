@@ -14,8 +14,79 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Debug Claude workflow
+      - name: Debug + call Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           echo "✅ Claude workflow is running"
-          echo "Issue number: ${{ github.event.issue.number }}"
-          echo "Issue title:  ${{ github.event.issue.title }}"
+          echo "Issue number: $ISSUE_NUMBER"
+          echo "Issue title:  $ISSUE_TITLE"
+
+          echo "🔔 Calling Claude..."
+
+          # 1) プロンプト全文を Bash 側で組み立てる
+          PROMPT="$(cat << EOF
+あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
+
+以下のGitHub Issueの内容を読み、Maestro Takaに向けて：
+
+1. Issueの内容を一文で要約する
+2. 次に取るべき具体的なアクションを2〜3個、箇条書きで提案する
+3. GPTとは少し違う視点（優しいデビルズアドボケイト）を一文添える
+
+日本語で、あたたかく、思いやりのある客観的トーンで回答してください。
+
+【Issueタイトル】
+$ISSUE_TITLE
+
+【Issue本文】
+$ISSUE_BODY
+EOF
+)"
+
+          # 2) jq で JSON を安全に構築
+          JSON=$(jq -n --arg prompt "$PROMPT" '
+            {
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 400,
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    { "type": "text", "text": $prompt }
+                  ]
+                }
+              ]
+            }
+          ')
+
+          echo "✅ JSON payload built."
+
+          # 3) Claude API を呼び出し（失敗してもワークフロー自体は続行）
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$JSON" || true)
+
+          echo "📨 Raw response from Claude:"
+          echo "$RESPONSE"
+
+          # 4) レスポンスからテキストを取り出す（失敗しても落とさない）
+          COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || echo "")
+
+          if [ -z "$COMMENT" ]; then
+            COMMENT="（Claudeからの通常レスポンスを取得できませんでした。以下は生のレスポンスです：）\n\n$RESPONSE"
+          fi
+
+          # 5) Issue にコメントを投稿
+          gh api \
+            repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
+            -f body="$COMMENT"
+
+          echo "✅ Comment posted."
