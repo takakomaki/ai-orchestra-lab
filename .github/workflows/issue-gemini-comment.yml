@@ -9,34 +9,29 @@ on:
 
 jobs:
   gemini-comment:
+    # 「Gemini」ラベルが付いたときだけ実行
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Gemini')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Gemini API call (minimal)
+      - name: Call Gemini API (minimal working version)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           set -euo pipefail
+
           echo "✨ Gemini workflow is running"
           echo "Repository : ${REPO}"
           echo "Issue number: ${ISSUE_NUMBER}"
           echo "Issue title : ${ISSUE_TITLE}"
 
-          # ---- Gemini API 呼び出し（最小版） ----
-          payload=$(jq -n --arg text "Hello from GitHub Actions" '
-            {
-              "contents": [
-                {
-                  "parts": [
-                    { "text": $text }
-                  ]
-                }
-              ]
-            }')
+          # ---- Gemini API 呼び出し（最小動作版）----
+          payload=$(jq -n --arg text "Hello from GitHub Actions" \
+            '{ contents: [ { parts: [ { text: $text } ] } ] }')
 
           echo "📦 JSON payload:"
           echo "$payload"
@@ -45,7 +40,21 @@ jobs:
             -H "Content-Type: application/json" \
             -H "x-goog-api-key: ${GEMINI_API_KEY}" \
             -d "$payload" \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent")
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent")
 
           echo "🟦 Raw response from Gemini:"
           echo "$response"
+
+          # ---- Gemini の返答を抽出 ----
+          comment_body=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+          if [ -z "$comment_body" ]; then
+            comment_body="（Geminiから返答を取得できませんでした。）"
+          fi
+
+          # ---- Issue にコメント投稿 ----
+          gh api \
+            repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
+            -f body="$comment_body"
+
+          echo "✅ Comment posted to issue #${ISSUE_NUMBER}"
