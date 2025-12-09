@@ -11,7 +11,7 @@ jobs:
   gpt-comment:
     runs-on: ubuntu-latest
 
-    # ついたラベルの中に「GPT」が含まれているときだけ実行
+    # ラベル一覧の中に「GPT」が含まれているときだけ実行
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'GPT')
 
     steps:
@@ -24,49 +24,47 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          # プロンプトを組み立て
-          prompt=$(cat <<EOF
-あなたは「AI Orchestra」のGPTアシスタントです。
-以下のGitHub Issueの内容を読み、Maestro Takaに向けて：
+          echo "Issue title: ${ISSUE_TITLE}"
+          echo "Calling OpenAI..."
 
-1. Issueの内容を一文でやさしく要約する
-2. 次に取るべき具体的なアクションを2〜3個、箇条書きで提案する
+          prompt="あなたは「AI Orchestra」のGPTアシスタントです。
+          以下のGitHub Issueの内容を読み、Maestro Takaに向けて：
 
-日本語で、あたたかく・実務的に・前向きなトーンで書いてください。
+          1. Issueの内容を一文でやさしく要約する
+          2. 次に取るべき具体的なアクションを2〜3個、箇条書きで提案する
 
-【Issueタイトル】
-${ISSUE_TITLE}
+          日本語で、あたたかく・実務的に・前向きなトーンで書いてください。
 
-【Issue本文】
-${ISSUE_BODY}
-EOF
-)
+          【Issueタイトル】
+          ${ISSUE_TITLE}
 
-          # OpenAI Chat Completions API を呼び出す
-          request_json=$(jq -n --arg prompt "$prompt" '
-            {
-              model: "gpt-4.1-mini",
-              messages: [
-                {role: "system", content: "You are a helpful AI assistant."},
-                {role: "user",   content: $prompt}
+          【Issue本文】
+          ${ISSUE_BODY}
+          "
+
+          # プロンプト全体を1つの文字列としてJSONに変換
+          json=$(printf '%s' "$prompt" | jq -Rs --arg model "gpt-4.1-mini" \
+            '{model:$model,
+              messages:[
+                {role:"system",content:"You are a helpful AI assistant."},
+                {role:"user",  content:.}
               ],
-              max_tokens: 400
-            }
-          ')
+              max_tokens:400
+            }')
 
           response=$(curl -s https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer ${OPENAI_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d "$request_json")
+            -d "$json")
 
-          # 応答本文だけを取り出し（失敗したらフォールバック文）
+          echo "Raw response: $response"
+
           comment_body=$(echo "$response" | jq -r '.choices[0].message.content // empty')
 
           if [ -z "$comment_body" ]; then
             comment_body="（GPTからの応答を取得できませんでした。ワークフロー／APIキー設定をご確認ください。）"
           fi
 
-          # Issue にコメントとして投稿
           gh api \
             repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
             -f body="$comment_body"
