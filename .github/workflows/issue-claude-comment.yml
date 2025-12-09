@@ -1,21 +1,61 @@
 name: Claude issue assistant
 
+permissions:
+  issues: write
+
 on:
   issues:
     types: [labeled]
 
-permissions:
-  issues: write
-
 jobs:
   claude-comment:
-    # ラベルに "Claude" が含まれているときだけ実行
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Claude')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Debug Claude workflow
+      - name: Log basic info
         run: |
-          echo "✅ Claude workflow is running"
+          echo "✨ Claude workflow is running"
           echo "Issue number: ${{ github.event.issue.number }}"
           echo "Issue title:  ${{ github.event.issue.title }}"
+
+      - name: Call Claude API and post comment
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
+          REPO:              ${{ github.repository }}
+          ISSUE_NUMBER:      ${{ github.event.issue.number }}
+          ISSUE_TITLE:       ${{ github.event.issue.title }}
+          ISSUE_BODY:        ${{ github.event.issue.body }}
+        run: |
+          set -e
+
+          PROMPT="あなたはAI Orchestraの木管セクション担当、Claudeアシスタントです。
+以下のGitHub Issueを読み、Maestro Takaに日本語で簡潔にコメントしてください。
+
+【Issueタイトル】
+${ISSUE_TITLE}
+
+【Issue本文】
+${ISSUE_BODY}
+"
+
+          echo "Calling Claude..."
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(jq -n --arg prompt "$PROMPT" \
+              '{model:"claude-3-5-sonnet-20241022", max_tokens:200,
+                messages:[{role:"user", content:[{type:"text", text:$prompt}]}]}')")
+
+          echo "Raw response: $RESPONSE"
+
+          COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+
+          if [ -z "$COMMENT" ]; then
+            COMMENT="（Claudeからの回答を取得できませんでした。）"
+          fi
+
+          gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -f body="$COMMENT"

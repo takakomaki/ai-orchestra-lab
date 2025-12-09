@@ -1,21 +1,61 @@
 name: Gemini issue assistant
 
+permissions:
+  issues: write
+
 on:
   issues:
     types: [labeled]
 
-permissions:
-  issues: write
-
 jobs:
   gemini-comment:
-    # ラベルに "Gemini" が含まれているときだけ実行
     if: contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'Gemini')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Debug Gemini workflow
+      - name: Log basic info
         run: |
           echo "✨ Gemini workflow is running"
           echo "Issue number: ${{ github.event.issue.number }}"
           echo "Issue title:  ${{ github.event.issue.title }}"
+
+      - name: Call Gemini API and post comment
+        env:
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN:         ${{ secrets.GITHUB_TOKEN }}
+          REPO:             ${{ github.repository }}
+          ISSUE_NUMBER:     ${{ github.event.issue.number }}
+          ISSUE_TITLE:      ${{ github.event.issue.title }}
+          ISSUE_BODY:       ${{ github.event.issue.body }}
+        run: |
+          set -e
+
+          PROMPT="あなたはAI Orchestraの弦楽セクション担当、Gemini（美の化身）アシスタントです。
+以下のGitHub Issueを読み、Maestro Takaに日本語でやさしくコメントしてください。
+
+【Issueタイトル】
+${ISSUE_TITLE}
+
+【Issue本文】
+${ISSUE_BODY}
+"
+
+          echo "Calling Gemini..."
+
+          RESPONSE=$(curl -s \
+            -H "Content-Type: application/json" \
+            -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+            -X POST \
+            -d "$(jq -n --arg prompt "$PROMPT" \
+              '{contents:[{role:"user", parts:[{text:$prompt}]}]}')" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent")
+
+          echo "Raw response: $RESPONSE"
+
+          COMMENT=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+          if [ -z "$COMMENT" ]; then
+            COMMENT="（Geminiからの回答を取得できませんでした。）"
+          fi
+
+          gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -f body="$COMMENT"
